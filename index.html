@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Futures Risk Calculator</title>
+  <title>Fade‑Trend Risk Calculator</title>
   <!-- Tailwind CSS CDN -->
   <script src="https://cdn.tailwindcss.com"></script>
   <style>
@@ -14,40 +14,35 @@
   </style>
 </head>
 <body class="bg-slate-50 antialiased p-4">
-  <h1 class="text-3xl font-bold mb-4 text-center">Futures Risk Calculator</h1>
+  <h1 class="text-3xl font-bold mb-4 text-center">Fade‑Trend Risk Calculator</h1>
 
   <div class="max-w-4xl mx-auto grid gap-6">
     <!-- Input Card -->
     <div class="bg-white shadow-xl rounded-2xl p-6">
-      <h2 class="text-xl font-semibold mb-4">Trade Inputs</h2>
+      <h2 class="text-xl font-semibold mb-4">Move Parameters</h2>
       <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+        <div>
+          <label class="block mb-1 font-medium" for="startPrice">Start Price</label>
+          <input id="startPrice" type="number" step="0.25" class="w-full border rounded-xl p-2" value="4600" />
+        </div>
+        <div>
+          <label class="block mb-1 font-medium" for="endPrice">End Price</label>
+          <input id="endPrice" type="number" step="0.25" class="w-full border rounded-xl p-2" value="4620" />
+        </div>
         <div>
           <label class="block mb-1 font-medium" for="accountSize">Account Size ($)</label>
           <input id="accountSize" type="number" step="100" class="w-full border rounded-xl p-2" value="50000" />
         </div>
-        <div class="lg:col-span-2">
-          <label class="block mb-1 font-medium" for="riskList">Risk % List (comma‑sep)</label>
+        <div>
+          <label class="block mb-1 font-medium" for="riskList">Risk % List (comma-sep)</label>
           <input id="riskList" type="text" class="w-full border rounded-xl p-2" value="0.5,1,2" />
-          <p class="text-xs text-slate-500 mt-1">Enter up to 3 percentages (e.g., 0.5,1,2). Leave blank entries to ignore.</p>
         </div>
         <div>
           <label class="block mb-1 font-medium" for="instrument">Instrument</label>
           <select id="instrument" class="w-full border rounded-xl p-2">
-            <option value="ES" selected>ES (S&P 500)</option>
-            <option value="NQ">NQ (Nasdaq‑100)</option>
+            <option value="ES">ES (S&P 500)</option>
+            <option value="NQ" selected>NQ (Nasdaq-100)</option>
           </select>
-        </div>
-        <div>
-          <label class="block mb-1 font-medium" for="entry">Entry Price</label>
-          <input id="entry" type="number" step="0.25" class="w-full border rounded-xl p-2" value="4600" />
-        </div>
-        <div>
-          <label class="block mb-1 font-medium" for="stop">Stop‑Loss Price</label>
-          <input id="stop" type="number" step="0.25" class="w-full border rounded-xl p-2" value="4592" />
-        </div>
-        <div>
-          <label class="block mb-1 font-medium" for="target">Target Price</label>
-          <input id="target" type="number" step="0.25" class="w-full border rounded-xl p-2" value="4616" />
         </div>
       </div>
       <button id="calcBtn" class="mt-6 w-full md:w-auto bg-blue-600 hover:bg-blue-700 text-white font-semibold py-2 px-6 rounded-2xl shadow-md transition">Calculate</button>
@@ -78,22 +73,29 @@
     }
 
     function calculate() {
+      const start = parseFloat(document.getElementById("startPrice").value);
+      const end = parseFloat(document.getElementById("endPrice").value);
       const accountSize = parseFloat(document.getElementById("accountSize").value);
       const riskListStr = document.getElementById("riskList").value;
       const instrument = document.getElementById("instrument").value;
-      const entry = parseFloat(document.getElementById("entry").value);
-      const stop = parseFloat(document.getElementById("stop").value);
-      const target = parseFloat(document.getElementById("target").value);
 
-      if (!accountSize || !entry || !stop || !target) return;
+      if (!start || !end || !accountSize) return;
+
+      const range = end - start; // may be negative
+      // Entry at 5/8 (0.625) of the full move from start
+      const entry = start + 0.625 * range;
+      const stop = end; // stop at end of impulse
+      const target = start + 0.25 * range; // 1/4 from start
 
       const stopPts = Math.abs(entry - stop);
-      const rewardPts = Math.abs(target - entry);
+      const rewardPts = Math.abs(entry - target);
       const rMultipleBase = stopPts ? rewardPts / stopPts : 0;
 
       const riskPercents = parseRiskList(riskListStr);
 
-      let html = `<p><strong>Stop Distance:</strong> ${numFmt(stopPts)} pts &nbsp; | &nbsp; <strong>Reward Distance:</strong> ${numFmt(rewardPts)} pts &nbsp; | &nbsp; <strong>Reward‑to‑Risk:</strong> ${rMultipleBase ? numFmt(rMultipleBase, 2) + " R" : "–"}</p>`;
+      let html = `
+        <p><strong>Entry Price:</strong> ${numFmt(entry)} &nbsp; | &nbsp; <strong>Stop-Loss:</strong> ${numFmt(stop)} &nbsp; | &nbsp; <strong>Take-Profit:</strong> ${numFmt(target)}</p>
+        <p><strong>Stop Distance:</strong> ${numFmt(stopPts)} pts &nbsp; | &nbsp; <strong>Reward Distance:</strong> ${numFmt(rewardPts)} pts &nbsp; | &nbsp; <strong>Reward-to-Risk:</strong> ${rMultipleBase ? numFmt(rMultipleBase, 2) + " R" : "–"}</p>`;
 
       riskPercents.forEach((rp) => {
         const cashRiskAllowed = accountSize * (rp / 100);
@@ -111,8 +113,10 @@
           const posRisk = contractsAllowed * $riskPerContract;
           const posReward = rewardPts * ptVal * contractsAllowed;
 
+          const cardColor = contractsAllowed > 0 ? "bg-green-200" : "bg-red-200";
+
           html += `
-            <div class="bg-slate-100 rounded-xl p-4 shadow-inner">
+            <div class="rounded-xl p-4 shadow-inner ${cardColor}">
               <h4 class="text-md font-semibold mb-1 uppercase">${ct}</h4>
               <p><strong>Point Value:</strong> $${ptVal}</p>
               <p><strong>Risk / Contract:</strong> ${moneyFmt($riskPerContract)}</p>
@@ -130,8 +134,9 @@
     }
 
     document.getElementById("calcBtn").addEventListener("click", calculate);
-    document.querySelectorAll("#accountSize,#riskList,#instrument,#entry,#stop,#target").forEach((el) => el.addEventListener("input", calculate));
+    document.querySelectorAll("#startPrice,#endPrice,#accountSize,#riskList,#instrument").forEach((el) => el.addEventListener("input", calculate));
 
+    // initial render
     calculate();
   </script>
 </body>
